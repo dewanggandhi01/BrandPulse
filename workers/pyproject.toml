@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "brandpulse-workers"
+version = "0.1.0"
+description = "Background workers for BrandPulse — crawling, SEO, diffing, sentiment, ads, reports"
+requires-python = ">=3.12"
+dependencies = [
+    "celery[redis]>=5.4",
+    "redis[hiredis]",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg",
+    "httpx",
+    "pydantic>=2.10",
+    "pydantic-settings",
+    "structlog",
+    "python-dotenv",
+    "beautifulsoup4",
+    "lxml",
+    "playwright",
+    "mmh3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "ruff",
+]

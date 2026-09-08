@@ -1,0 +1,139 @@
+services:
+  postgres:
+    image: postgres:17
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-brandpulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-brandpulse}
+      POSTGRES_DB: ${POSTGRES_DB:-brandpulse}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-brandpulse} -d ${POSTGRES_DB:-brandpulse}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/backend
+      - ./workers:/app/workers
+    environment:
+      DATABASE_URL: postgresql+asyncpg://brandpulse:brandpulse@postgres:5432/brandpulse
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      PYTHONPATH: /app:/app/backend
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
+  celery-scraping:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    command: celery -A workers.celery_app worker -Q scraping --pool=solo --loglevel=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./workers:/app/workers
+      - ./backend:/app/backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://brandpulse:brandpulse@postgres:5432/brandpulse
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      PYTHONPATH: /app:/app/backend
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
+  celery-analysis:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    command: celery -A workers.celery_app worker -Q analysis,seo,diffing --pool=prefork --concurrency=4 --loglevel=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./workers:/app/workers
+      - ./backend:/app/backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://brandpulse:brandpulse@postgres:5432/brandpulse
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      PYTHONPATH: /app:/app/backend
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    command: celery -A workers.celery_app beat --loglevel=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./workers:/app/workers
+      - ./backend:/app/backend
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      PYTHONPATH: /app:/app/backend
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+  flower:
+    image: mher/flower:latest
+    ports:
+      - "5555:5555"
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

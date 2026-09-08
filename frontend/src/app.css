@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: oklch(0.97 0.01 250);
+  --color-brand-100: oklch(0.93 0.02 250);
+  --color-brand-500: oklch(0.55 0.15 250);
+  --color-brand-600: oklch(0.48 0.17 250);
+  --color-brand-700: oklch(0.40 0.15 250);
+  --color-surface: oklch(1.0 0 0);
+  --color-base: oklch(0.985 0.002 250);
+  --color-muted: oklch(0.55 0.01 250);
+  --color-border: oklch(0.90 0.005 250);
+  --color-success: oklch(0.55 0.15 145);
+  --color-warning: oklch(0.70 0.15 75);
+  --color-critical: oklch(0.55 0.20 25);
+  
+  --color-primary: oklch(0.55 0.15 250);
+  --color-primary-hover: oklch(0.48 0.17 250);
+  
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  
+  /* Major Third Typography Scale (1.250) */
+  --font-size-h1: 31.25px;
+  --font-size-h2: 25px;
+  --font-size-h3: 20px;
+  --font-size-body: 16px;
+  
+  /* Container scale */
+  --container-xs: 20rem;
+  --container-sm: 24rem;
+  --container-md: 28rem;
+  --container-lg: 32rem;
+  --container-xl: 36rem;
+  --container-2xl: 42rem;
+  --container-3xl: 48rem;
+  --container-4xl: 56rem;
+  --container-5xl: 64rem;
+}
+
+@layer base {
+  body {
+    font-variant-numeric: tabular-nums;
+  }
+}

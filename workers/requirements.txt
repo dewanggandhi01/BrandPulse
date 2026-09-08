@@ -1,0 +1,13 @@
+celery[redis]>=5.4
+redis[hiredis]
+sqlalchemy[asyncio]>=2.0
+asyncpg
+httpx
+pydantic>=2.10
+pydantic-settings
+structlog
+python-dotenv
+beautifulsoup4
+lxml
+playwright
+mmh3

@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "brandpulse-backend"
+version = "0.1.0"
+description = "Backend for BrandPulse"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.115.0",
+    "uvicorn[standard]",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg",
+    "alembic",
+    "pydantic>=2.10",
+    "pydantic-settings",
+    "redis[hiredis]",
+    "celery[redis]>=5.4",
+    "httpx",
+    "beautifulsoup4",
+    "lxml",
+    "playwright",
+    "python-multipart",
+    "structlog",
+    "python-dotenv",
+    "mmh3"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "httpx",
+    "ruff",
+    "mypy"
+]

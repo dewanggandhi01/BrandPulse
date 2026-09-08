@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.venv
+venv/
+ENV/
+env/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+.pnpm-debug.log
+
+# Docker
+.docker
+
+# Environments
+.env
+.env.local
+.env.*.local
+
+# Type checking
+.mypy_cache/
+.pyre/
+.type.decl.d.ts
+
+# Testing
+.pytest_cache/
+coverage/
+.coverage
+htmlcov/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Linting
+.ruff_cache/
+.pre-commit-config.yaml
+
+# Playwright
+.playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# OS
+.DS_Store
+Thumbs.db
