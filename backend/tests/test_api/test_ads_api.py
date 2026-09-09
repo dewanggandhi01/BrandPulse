@@ -116,3 +116,11 @@ async def test_ads_api_endpoints():
         assert analytics["evergreen_count"] == 1
         assert len(analytics["platform_distribution"]) == 1
         assert analytics["platform_distribution"][0]["platform"] == "google"
+
+        # 6. Seed ads for brand -> 201 Created
+        resp_seed = await client.post(f"/api/v1/ads/brand/{fake_id}/seed")
+        assert resp_seed.status_code == 201
+        seed_data = resp_seed.json()
+        assert seed_data["status"] == "success"
+        assert seed_data["count"] >= 10
+        assert seed_data["brand_id"] == str(fake_id)

@@ -23,7 +23,7 @@ export function useGetAds(
       if (search && search.trim()) params.append('search', search.trim());
 
       const response = await apiClient.get<PaginatedResponse<AdIntel>>(
-        `/api/v1/ads/brand/${brandId}?${params.toString()}`
+        `/ads/brand/${brandId}?${params.toString()}`
       );
       return response.data;
     },
@@ -37,7 +37,7 @@ export function useGetAdAnalytics(brandId: string | null | undefined) {
     queryFn: async () => {
       if (!brandId) return null;
       const response = await apiClient.get<AdIntelAnalytics>(
-        `/api/v1/ads/brand/${brandId}/analytics`
+        `/ads/brand/${brandId}/analytics`
       );
       return response.data;
     },
@@ -63,8 +63,26 @@ export function useCreateAd(brandId: string | null | undefined) {
     mutationFn: async (payload: CreateAdPayload) => {
       if (!brandId) throw new Error('Brand ID is required');
       const response = await apiClient.post<AdIntel>(
-        `/api/v1/ads/brand/${brandId}`,
+        `/ads/brand/${brandId}`,
         payload
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ads', brandId] });
+      queryClient.invalidateQueries({ queryKey: ['ad-analytics', brandId] });
+    },
+  });
+}
+
+export function useSeedAds(brandId: string | null | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!brandId) throw new Error('Brand ID is required');
+      const response = await apiClient.post<{ status: string; count: number; brand_id: string }>(
+        `/ads/brand/${brandId}/seed`
       );
       return response.data;
     },
@@ -97,7 +115,7 @@ export function useParseAdPreview() {
   return useMutation({
     mutationFn: async (payload: AdParsePreviewPayload) => {
       const response = await apiClient.post<AdParsePreviewResult>(
-        `/api/v1/ads/parse-preview`,
+        `/ads/parse-preview`,
         payload
       );
       return response.data;

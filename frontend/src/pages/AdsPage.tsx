@@ -1,10 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppStore } from '../stores/appStore';
-import { useGetAds, useGetAdAnalytics } from '../api/queries/useAds';
+import { useGetBrands } from '../api/queries/useBrands';
+import { useGetAds, useGetAdAnalytics, useSeedAds } from '../api/queries/useAds';
 import { AddAdModal } from '../components/ads/AddAdModal';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { Spinner } from '../components/ui/Spinner';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { ErrorState } from '../components/feedback/ErrorState';
@@ -21,6 +23,8 @@ import {
   RefreshCw,
   Sparkles,
   Calendar,
+  Info,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -46,11 +50,27 @@ const PLATFORM_COLORS: Record<string, string> = {
 };
 
 export const AdsPage: React.FC = () => {
-  const { currentBrandId } = useAppStore();
+  const { data: brands = [], isLoading: brandsLoading } = useGetBrands();
+  const { currentBrandId, setCurrentBrandId } = useAppStore();
+
+  // Active brand resolution: store selection if valid, fallback to first active brand
+  const effectiveBrandId =
+    currentBrandId && brands.some((b) => b.id === currentBrandId)
+      ? currentBrandId
+      : brands[0]?.id || '';
+
+  // Synchronize store if empty but brands exist
+  useEffect(() => {
+    if (!currentBrandId && brands.length > 0) {
+      setCurrentBrandId(brands[0].id);
+    }
+  }, [currentBrandId, brands, setCurrentBrandId]);
+
   const [platformFilter, setPlatformFilter] = useState('all');
   const [formatFilter, setFormatFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [seedNotice, setSeedNotice] = useState<string | null>(null);
 
   // Queries
   const {
@@ -58,14 +78,31 @@ export const AdsPage: React.FC = () => {
     isLoading: isAdsLoading,
     isError: isAdsError,
     refetch: refetchAds,
-  } = useGetAds(currentBrandId, platformFilter, formatFilter, searchQuery);
+  } = useGetAds(effectiveBrandId, platformFilter, formatFilter, searchQuery);
 
   const {
     data: analyticsData,
     isLoading: isAnalyticsLoading,
     isError: isAnalyticsError,
     refetch: refetchAnalytics,
-  } = useGetAdAnalytics(currentBrandId);
+  } = useGetAdAnalytics(effectiveBrandId);
+
+  const seedMutation = useSeedAds(effectiveBrandId);
+
+  const handleSeed = () => {
+    if (!effectiveBrandId) return;
+    setSeedNotice(null);
+    seedMutation.mutate(undefined, {
+      onSuccess: (data) => {
+        setSeedNotice(`Successfully collected and analyzed ${data.count} competitor ad creatives!`);
+        setTimeout(() => setSeedNotice(null), 5000);
+      },
+      onError: () => {
+        setSeedNotice('Failed to scan ad libraries. Please try again.');
+        setTimeout(() => setSeedNotice(null), 5000);
+      },
+    });
+  };
 
   // Filtered ads in memory for quick text search
   const filteredAds = useMemo(() => {
@@ -100,13 +137,13 @@ export const AdsPage: React.FC = () => {
     }));
   }, [analyticsData]);
 
-  if (!currentBrandId) {
+  if (!effectiveBrandId && !brandsLoading) {
     return (
       <div className="flex-1 flex flex-col justify-center items-center p-8">
         <EmptyState
           icon={<Megaphone className="w-12 h-12 text-slate-500" />}
-          title="No Brand Selected"
-          description="Please select a brand from the top navigation bar to inspect competitor paid advertising intelligence."
+          title="No Brand Configured"
+          description="Please add a brand first to inspect competitor paid advertising intelligence."
         />
       </div>
     );
@@ -145,7 +182,37 @@ export const AdsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Brand Selector Dropdown */}
+          <div className="flex items-center gap-2">
+            <select
+              id="brand-select"
+              value={effectiveBrandId}
+              onChange={(e) => setCurrentBrandId(e.target.value)}
+              className="bg-slate-900 border border-slate-700 text-slate-100 text-xs rounded-lg px-3 py-2 outline-none focus:border-blue-500 min-w-[170px]"
+            >
+              {brands.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.domain})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleSeed}
+            disabled={seedMutation.isPending || !effectiveBrandId}
+          >
+            {seedMutation.isPending ? (
+              <Spinner size="sm" className="mr-1.5" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+            )}
+            Scan Ad Libraries
+          </Button>
+
           <Button
             variant="secondary"
             size="sm"
@@ -157,6 +224,7 @@ export const AdsPage: React.FC = () => {
             <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
             Refresh
           </Button>
+
           <Button
             variant="primary"
             size="sm"
@@ -167,6 +235,60 @@ export const AdsPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* Action Notice Alert */}
+      {seedNotice && (
+        <div className="p-3 bg-emerald-950/40 border border-emerald-800 rounded-lg text-xs text-emerald-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{seedNotice}</span>
+          </div>
+          <button
+            onClick={() => setSeedNotice(null)}
+            className="text-slate-400 hover:text-slate-200 text-xs ml-4"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Diagnostic & Spend Estimation Insights Banner */}
+      <Card className="bg-gradient-to-r from-slate-900 via-slate-900 to-blue-950/40 border-slate-800 p-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 shrink-0 mt-0.5">
+            <Info className="w-4 h-4" />
+          </div>
+          <div className="space-y-1 text-xs text-slate-300">
+            <span className="font-semibold text-slate-100 text-sm block">
+              How Competitor Ad Intelligence & Longevity Estimation Works
+            </span>
+            <p className="text-slate-400 leading-relaxed">
+              BrandPulse scans public transparency ad repositories (Meta Ad Library, Google Ads Transparency, LinkedIn).
+              Because digital marketing turns off losing creatives within 3–7 days, running duration is the primary metric for ROI.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+              <div className="bg-slate-950/60 p-2.5 rounded border border-slate-800">
+                <span className="text-amber-300 font-medium block mb-0.5">1. Evergreen Winners (&gt;45 days)</span>
+                <span className="text-[11px] text-slate-400 block">
+                  Ads active for over 45 days are proven high-converting assets with high continuous budget allocations ($25,000+).
+                </span>
+              </div>
+              <div className="bg-slate-950/60 p-2.5 rounded border border-slate-800">
+                <span className="text-cyan-300 font-medium block mb-0.5">2. Network & Format Mix</span>
+                <span className="text-[11px] text-slate-400 block">
+                  Identifies competitor channel distribution across Google Search, Meta Sponsored Feeds, Display Banners, and Video.
+                </span>
+              </div>
+              <div className="bg-slate-950/60 p-2.5 rounded border border-slate-800">
+                <span className="text-purple-300 font-medium block mb-0.5">3. Creative Hook & CTA Mining</span>
+                <span className="text-[11px] text-slate-400 block">
+                  NLP automatically parses headlines, conversion hooks, landing pages, and UTM tracking to reveal their funnel strategy.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {/* KPI Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -543,7 +665,7 @@ export const AdsPage: React.FC = () => {
       <AddAdModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        brandId={currentBrandId}
+        brandId={effectiveBrandId}
       />
     </div>
   );
