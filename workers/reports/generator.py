@@ -36,7 +36,8 @@ class ExecutiveReportGenerator:
         product_data: dict[str, Any] | None = None,
         change_data: dict[str, Any] | None = None,
         sentiment_data: dict[str, Any] | None = None,
-        ad_data: dict[str, Any] | None = None
+        ad_data: dict[str, Any] | None = None,
+        competitor_count: int = 0
     ) -> ExecutiveBriefData:
         # Default fallbacks
         seo = seo_data or {}
@@ -51,19 +52,21 @@ class ExecutiveReportGenerator:
 
         # Pillar 2: Pricing & Catalog Parity
         in_stock_pct = 100.0
-        tot_products = prod.get("total_products", 0)
+        tot_products = int(prod.get("total_products") or 0)
+        in_stock_count = int(prod.get("in_stock_count") or 0)
         if tot_products > 0:
-            in_stock_pct = (prod.get("in_stock_count", 0) / tot_products) * 100.0
+            in_stock_pct = (in_stock_count / tot_products) * 100.0
         pricing_score = min(100, int(in_stock_pct * 0.7 + (30 if tot_products > 0 else 15)))
 
         # Pillar 3: Sentiment & Reputation
-        nss = sent.get("net_sentiment_score", 0.0)  # -100 to +100
+        raw_nss = sent.get("net_sentiment_score")
+        nss = float(raw_nss if raw_nss is not None else 0.0)  # -100 to +100
         # Map -100..+100 to 0..100
         sentiment_score = max(0, min(100, int((nss + 100) / 2)))
 
         # Pillar 4: Change & Market Agility
-        tot_changes = chg.get("total_changes", 0)
-        # Moderate change is healthy agility (e.g. 5-20 changes = 85+)
+        tot_changes = int(chg.get("total_changes") or 0)
+        # Moderate change is healthy agility (e.g. 3-25 changes = 85+)
         if 3 <= tot_changes <= 25:
             agility_score = 85
         elif tot_changes > 25:
@@ -72,8 +75,8 @@ class ExecutiveReportGenerator:
             agility_score = 50
 
         # Pillar 5: Advertising Footprint
-        tot_ads = ads.get("total_ads", 0)
-        evergreen_count = ads.get("evergreen_count", 0)
+        tot_ads = int(ads.get("total_ads") or 0)
+        evergreen_count = int(ads.get("evergreen_count") or 0)
         ad_score = min(100, int((tot_ads * 4) + (evergreen_count * 12) + (30 if tot_ads > 0 else 0)))
 
         # 2. Composite Health Score (Weighted Multi-Pillar Blend)

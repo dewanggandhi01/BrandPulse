@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../stores/appStore';
-import { useGetBrand } from '../api/queries/useBrands';
+import { useGetBrand, useGetBrands } from '../api/queries/useBrands';
 import {
   useGetReports,
   useGenerateReport,
@@ -28,12 +28,23 @@ import {
 } from 'lucide-react';
 
 export const ReportsPage: React.FC = () => {
-  const { currentBrandId } = useAppStore();
+  const { currentBrandId, setCurrentBrandId } = useAppStore();
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [page] = useState(1);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const { data: currentBrand } = useGetBrand(currentBrandId || '');
+  const { data: brands = [], isLoading: brandsLoading } = useGetBrands();
+  const effectiveBrandId = currentBrandId || (brands.length > 0 ? brands[0].id : '');
+
+  // Synchronize store if empty but brands exist
+  useEffect(() => {
+    if (!currentBrandId && brands.length > 0) {
+      setCurrentBrandId(brands[0].id);
+    }
+  }, [currentBrandId, brands, setCurrentBrandId]);
+
+  const { data: currentBrand } = useGetBrand(effectiveBrandId);
 
   // Queries
   const {
@@ -41,11 +52,11 @@ export const ReportsPage: React.FC = () => {
     isLoading,
     isError,
     refetch,
-  } = useGetReports(currentBrandId, page, 20);
+  } = useGetReports(effectiveBrandId, page, 20);
 
   // Mutations
-  const generateMutation = useGenerateReport(currentBrandId);
-  const deleteMutation = useDeleteReport(currentBrandId);
+  const generateMutation = useGenerateReport(effectiveBrandId);
+  const deleteMutation = useDeleteReport(effectiveBrandId);
 
   const reports = reportsData?.items || [];
   const latestReport = reports[0] || null;
@@ -58,17 +69,22 @@ export const ReportsPage: React.FC = () => {
     latestReport?.content?.recommendations?.length ?? 0;
 
   const handleGenerate = async () => {
-    if (!currentBrandId) return;
+    if (!effectiveBrandId) return;
     try {
+      setNotice(null);
       const res = await generateMutation.mutateAsync({
         report_type: 'executive_brief',
       });
       if (res?.report) {
         setSelectedReport(res.report);
         setIsViewerOpen(true);
+        setNotice('New Executive Intelligence Brief successfully synthesized!');
+        setTimeout(() => setNotice(null), 5000);
       }
     } catch (err) {
       console.error('Failed to generate report', err);
+      setNotice('Failed to generate report. Please try again.');
+      setTimeout(() => setNotice(null), 5000);
     }
   };
 
@@ -104,7 +120,7 @@ export const ReportsPage: React.FC = () => {
     return <Badge variant="default">{risk}</Badge>;
   };
 
-  if (!currentBrandId) {
+  if (!effectiveBrandId && !brandsLoading) {
     return (
       <div className="space-y-6 h-full flex flex-col">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
@@ -113,8 +129,8 @@ export const ReportsPage: React.FC = () => {
         <div className="flex-1 flex items-center justify-center">
           <EmptyState
             icon={<Building2 size={48} />}
-            title="No Brand Selected"
-            description="Please select a brand from the top navigation to view or generate executive reports."
+            title="No Brand Configured"
+            description="Please create or configure a brand to start synthesizing executive intelligence briefs."
           />
         </div>
       </div>
@@ -123,6 +139,23 @@ export const ReportsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Notice Alert Banner */}
+      {notice && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 text-xs font-medium px-4 py-2.5 rounded-lg flex items-center justify-between animate-fade-in">
+          <div className="flex items-center gap-2">
+            <Sparkles size={15} className="text-blue-600" />
+            <span>{notice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="text-blue-600 hover:text-blue-800 text-xs font-bold"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -133,7 +166,24 @@ export const ReportsPage: React.FC = () => {
             Holistic C-suite briefs synthesizing SEO health, pricing, web agility, sentiment, and ad intelligence.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {brands.length > 0 && (
+            <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 shadow-xs">
+              <span className="text-xs text-slate-500 font-medium">Brand:</span>
+              <select
+                value={effectiveBrandId}
+                onChange={(e) => setCurrentBrandId(e.target.value)}
+                className="text-xs font-semibold bg-transparent text-slate-800 focus:outline-none cursor-pointer"
+              >
+                {brands.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <Button
             variant="secondary"
             size="sm"
@@ -155,9 +205,66 @@ export const ReportsPage: React.FC = () => {
             <span>
               {generateMutation.isPending
                 ? 'Synthesizing Brief...'
-                : 'Generate Executive Brief'}
+                : 'Synthesize Executive Brief'}
             </span>
           </Button>
+        </div>
+      </div>
+
+      {/* Educational Strategic Diagnostics Banner */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 rounded-xl border border-slate-800 shadow-md">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div className="space-y-1.5 max-w-2xl">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-indigo-400" />
+              <h3 className="text-sm font-bold tracking-tight text-white uppercase">
+                C-Suite Multi-Pillar Diagnostic Framework
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Executive briefs correlate live telemetry across 5 core strategic intelligence pillars into a single composite brand health score (0–100):
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2">
+              <div className="bg-slate-800/80 border border-slate-700/60 p-2 rounded-lg text-center">
+                <span className="block text-[11px] font-bold text-blue-400">SEO Health</span>
+                <span className="text-[10px] text-slate-400">25% weight</span>
+              </div>
+              <div className="bg-slate-800/80 border border-slate-700/60 p-2 rounded-lg text-center">
+                <span className="block text-[11px] font-bold text-emerald-400">Catalog Parity</span>
+                <span className="text-[10px] text-slate-400">20% weight</span>
+              </div>
+              <div className="bg-slate-800/80 border border-slate-700/60 p-2 rounded-lg text-center">
+                <span className="block text-[11px] font-bold text-indigo-400">Sentiment NSS</span>
+                <span className="text-[10px] text-slate-400">25% weight</span>
+              </div>
+              <div className="bg-slate-800/80 border border-slate-700/60 p-2 rounded-lg text-center">
+                <span className="block text-[11px] font-bold text-amber-400">Web Agility</span>
+                <span className="text-[10px] text-slate-400">15% weight</span>
+              </div>
+              <div className="bg-slate-800/80 border border-slate-700/60 p-2 rounded-lg text-center">
+                <span className="block text-[11px] font-bold text-purple-400">Paid Media</span>
+                <span className="text-[10px] text-slate-400">15% weight</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800/60 border border-slate-700 p-3 rounded-lg text-xs space-y-1 shrink-0">
+            <span className="font-semibold text-slate-200 block text-[11px] uppercase tracking-wider">
+              Governance Tiers
+            </span>
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span className="text-slate-300">75–100: Low Risk (Market Leader)</span>
+            </div>
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span className="text-slate-300">50–74: Moderate Attention</span>
+            </div>
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="w-2 h-2 rounded-full bg-rose-400" />
+              <span className="text-slate-300">&lt;50: High Threat Alert</span>
+            </div>
+          </div>
         </div>
       </div>
 

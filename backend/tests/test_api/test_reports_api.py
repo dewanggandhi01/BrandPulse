@@ -51,12 +51,16 @@ async def test_reports_api_endpoints():
         mock_ad_exec = MagicMock()
         mock_ad_exec.scalars.return_value.all.return_value = []
 
+        mock_comp_exec = MagicMock()
+        mock_comp_exec.scalar_one.return_value = 0
+
         mock_db.execute.side_effect = [
             mock_seo_exec,
             mock_prod_exec,
             mock_chg_exec,
             mock_ment_exec,
-            mock_ad_exec
+            mock_ad_exec,
+            mock_comp_exec
         ]
 
         resp_generate = await client.post(
@@ -71,7 +75,7 @@ async def test_reports_api_endpoints():
 
         # 3. List reports for brand -> 200 OK
         report_id = uuid4()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         rep_obj = Report(
             id=report_id,
             brand_id=fake_id,
@@ -100,6 +104,21 @@ async def test_reports_api_endpoints():
         assert resp_detail.status_code == 200
         assert resp_detail.json()["id"] == str(report_id)
 
-        # 5. Delete report -> 204 No Content
+        # 5. Seed report endpoint -> 201 Created
+        mock_db.get.return_value = fake_brand
+        mock_db.execute.side_effect = [
+            mock_seo_exec,
+            mock_prod_exec,
+            mock_chg_exec,
+            mock_ment_exec,
+            mock_ad_exec,
+            mock_comp_exec
+        ]
+        resp_seed = await client.post(f"/api/v1/reports/brand/{fake_id}/seed")
+        assert resp_seed.status_code == 201
+        assert "Executive intelligence brief" in resp_seed.json()["message"]
+
+        # 6. Delete report -> 204 No Content
+        mock_db.get.return_value = rep_obj
         resp_del = await client.delete(f"/api/v1/reports/{report_id}")
         assert resp_del.status_code == 204

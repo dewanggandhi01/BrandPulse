@@ -75,3 +75,20 @@ export function useDeleteReport(brandId: string | null | undefined) {
     },
   });
 }
+
+export function useSeedReports(brandId: string | null | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!brandId) throw new Error('No brand selected');
+      const response = await apiClient.post<GenerateReportResponse>(
+        `/reports/brand/${brandId}/seed`
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reports', brandId] });
+    },
+  });
+}

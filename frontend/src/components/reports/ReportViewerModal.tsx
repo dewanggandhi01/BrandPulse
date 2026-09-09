@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   Printer,
   TrendingUp,
@@ -19,6 +19,20 @@ import type { Report, SwotItem } from '../../types';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
+
+const renderFormattedText = (text: string) => {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={i} className="font-semibold text-slate-900">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+};
 
 interface ReportViewerModalProps {
   report: Report | null;
@@ -70,6 +84,40 @@ export const ReportViewerModal: React.FC<ReportViewerModalProps> = ({
   const weaknesses = swot.filter((s: SwotItem) => s.category === 'weakness');
   const opportunities = swot.filter((s: SwotItem) => s.category === 'opportunity');
   const threats = swot.filter((s: SwotItem) => s.category === 'threat');
+
+  const parsedSections = useMemo(() => {
+    if (!narrative) return [];
+    const rawSections = narrative.split(/###\s+/);
+    const sections: { title: string; items: string[]; paragraph: string }[] = [];
+
+    for (const sec of rawSections) {
+      const trimmed = sec.trim();
+      if (!trimmed) continue;
+      const lines = trimmed.split('\n');
+      const title = lines[0].replace(/^#+\s*/, '').trim();
+      const bodyLines = lines.slice(1);
+
+      const items: string[] = [];
+      const paragraphLines: string[] = [];
+
+      for (const line of bodyLines) {
+        const cleanLine = line.trim();
+        if (cleanLine.startsWith('- ') || cleanLine.startsWith('* ')) {
+          items.push(cleanLine.replace(/^[-*]\s+/, ''));
+        } else if (cleanLine) {
+          paragraphLines.push(cleanLine);
+        }
+      }
+
+      sections.push({
+        title,
+        items,
+        paragraph: paragraphLines.join(' '),
+      });
+    }
+
+    return sections;
+  }, [narrative]);
 
   const getRiskBadge = (risk: string) => {
     if (risk.toLowerCase().includes('low')) {
@@ -182,15 +230,102 @@ export const ReportViewerModal: React.FC<ReportViewerModalProps> = ({
         </div>
 
           {/* AI Executive Synthesis Narrative */}
-          <div className="bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 border border-blue-200/80 rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-2 text-blue-900 font-semibold text-sm">
+          <div className="bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 border border-blue-200/80 rounded-xl p-5 space-y-3">
+            <div className="flex items-center gap-2 text-blue-900 font-semibold text-sm">
               <Sparkles size={16} className="text-blue-600" />
-              <span>Executive Synthesis & Narrative</span>
+              <span>Executive Synthesis & Diagnostic Findings</span>
             </div>
-            <p className="text-sm text-slate-700 leading-relaxed font-sans">
-              {narrative}
-            </p>
+
+            {parsedSections.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+                {parsedSections.map((sec, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white/90 backdrop-blur-xs border border-blue-100 rounded-lg p-3.5 shadow-xs"
+                  >
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-blue-950 mb-1.5 pb-1 border-b border-blue-50 flex items-center justify-between">
+                      <span>{sec.title}</span>
+                      <span className="text-[10px] text-blue-500 font-mono font-normal">Section {idx + 1}</span>
+                    </h4>
+                    {sec.paragraph && (
+                      <p className="text-xs text-slate-700 leading-relaxed mb-2">
+                        {renderFormattedText(sec.paragraph)}
+                      </p>
+                    )}
+                    {sec.items.length > 0 && (
+                      <ul className="space-y-1">
+                        {sec.items.map((item, i) => (
+                          <li key={i} className="text-xs text-slate-700 flex items-start gap-1.5">
+                            <span className="text-blue-600 font-bold mt-0.5">•</span>
+                            <span>{renderFormattedText(item)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-700 leading-relaxed font-sans">
+                {narrative}
+              </p>
+            )}
           </div>
+
+          {/* Cross-Pillar KPI Telemetry Cards */}
+          {content?.kpi_highlights && (
+            <div>
+              <div className="flex items-center justify-between mb-2.5">
+                <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Activity size={14} className="text-slate-500" />
+                  Telemetry Benchmarks
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+                    SEO Audit Score
+                  </span>
+                  <span className="text-base font-bold text-slate-900 font-mono">
+                    {content.kpi_highlights.seo_score ?? 'N/A'}{' '}
+                    <span className="text-xs font-normal text-slate-500">/ 100</span>
+                  </span>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+                    Net Sentiment (NSS)
+                  </span>
+                  <span className="text-base font-bold text-slate-900 font-mono">
+                    {content.kpi_highlights.net_sentiment_score !== undefined
+                      ? `${Number(content.kpi_highlights.net_sentiment_score) > 0 ? '+' : ''}${content.kpi_highlights.net_sentiment_score}`
+                      : '0.0'}
+                  </span>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+                    Tracked Paid Ads
+                  </span>
+                  <span className="text-base font-bold text-slate-900 font-mono">
+                    {content.kpi_highlights.total_ads ?? 0}{' '}
+                    <span className="text-xs font-normal text-slate-500">
+                      ({content.kpi_highlights.evergreen_ads ?? 0} evergreen)
+                    </span>
+                  </span>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+                    Est. Monthly Ad Spend
+                  </span>
+                  <span className="text-base font-bold text-slate-900 font-mono">
+                    {content.kpi_highlights.estimated_monthly_spend || '$0'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 5 Pillar Scorecard Breakdown */}
           <div>

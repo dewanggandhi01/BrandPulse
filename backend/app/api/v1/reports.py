@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
 from app.models.brand import Brand, BrandUrl
+from app.models.competitor import Competitor
 from app.models.report import Report
 from app.models.snapshot import Snapshot
 from app.models.seo_audit import SeoAudit
@@ -29,22 +30,16 @@ from workers.sentiment.analyzer import SentimentAnalyzer
 logger = structlog.get_logger()
 router = APIRouter()
 
-@router.post("/brand/{brand_id}/generate", response_model=GenerateReportResponse, status_code=status.HTTP_201_CREATED)
-async def generate_executive_report(
-    brand_id: uuid.UUID,
-    payload: ReportCreate = ReportCreate(),
-    db: AsyncSession = Depends(get_db)
-) -> GenerateReportResponse:
+async def compile_executive_brief_for_brand(
+    db: AsyncSession,
+    brand: Brand,
+    report_type: str = "executive_brief"
+) -> Report:
     """
-    Synthesize multi-source intelligence across SEO, Pricing, Changes, Sentiment,
-    and Ads to compile and persist an Executive Brief.
+    Synthesizes real-time intelligence across SEO, Pricing, Web Changes,
+    Sentiment NSS, and Ad Spend Velocity into a persisted executive brief.
     """
-    brand = await db.get(Brand, brand_id)
-    if not brand:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Brand with ID {brand_id} not found"
-        )
+    brand_id = brand.id
 
     # 1. Fetch latest SEO audit for brand
     seo_stmt = (
@@ -117,23 +112,28 @@ async def generate_executive_report(
     ]
     ad_analytics = AdSpendEstimator.aggregate_brand_ad_intelligence(raw_ads)
 
-    # 6. Generate brief via engine
+    # 6. Fetch competitors count
+    comp_stmt = select(func.count()).select_from(Competitor).where(Competitor.brand_id == brand_id)
+    comp_count = (await db.execute(comp_stmt)).scalar_one() or 0
+
+    # 7. Generate brief via engine
     generator = ExecutiveReportGenerator()
     brief = generator.generate_brief(
         brand_name=brand.name,
-        brand_domain=brand.domain,
+        brand_domain=brand.domain or f"{brand.name.lower()}.com",
         seo_data=seo_data,
         product_data=product_data,
         change_data=change_data,
         sentiment_data=sentiment_data,
-        ad_data=ad_analytics
+        ad_data=ad_analytics,
+        competitor_count=comp_count
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     report_row = Report(
         id=uuid.uuid4(),
         brand_id=brand_id,
-        report_type=payload.report_type,
+        report_type=report_type,
         content={
             "health_score": brief.health_score,
             "risk_level": brief.risk_level,
@@ -148,6 +148,49 @@ async def generate_executive_report(
     )
     db.add(report_row)
     await db.commit()
+    await db.refresh(report_row)
+    return report_row
+
+@router.post("/brand/{brand_id}/generate", response_model=GenerateReportResponse, status_code=status.HTTP_201_CREATED)
+async def generate_executive_report(
+    brand_id: uuid.UUID,
+    payload: ReportCreate = ReportCreate(),
+    db: AsyncSession = Depends(get_db)
+) -> GenerateReportResponse:
+    """
+    Synthesize multi-source intelligence across SEO, Pricing, Changes, Sentiment,
+    and Ads to compile and persist an Executive Brief.
+    """
+    brand = await db.get(Brand, brand_id)
+    if not brand:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Brand with ID {brand_id} not found"
+        )
+
+    report_row = await compile_executive_brief_for_brand(db, brand, payload.report_type)
+
+    return GenerateReportResponse(
+        message="Executive intelligence brief compiled successfully",
+        report=report_row
+    )
+
+@router.post("/brand/{brand_id}/seed", response_model=GenerateReportResponse, status_code=status.HTTP_201_CREATED)
+async def seed_report_endpoint(
+    brand_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+) -> GenerateReportResponse:
+    """
+    On-demand seeding or re-synthesis of an executive brief for a brand.
+    """
+    brand = await db.get(Brand, brand_id)
+    if not brand:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Brand with ID {brand_id} not found"
+        )
+
+    report_row = await compile_executive_brief_for_brand(db, brand, "executive_brief")
 
     return GenerateReportResponse(
         message="Executive intelligence brief compiled successfully",
@@ -163,6 +206,7 @@ async def list_brand_reports(
 ) -> ReportListResponse:
     """
     List all generated historical executive reports for a brand.
+    Auto-synthesizes an initial baseline report if 0 reports exist.
     """
     brand = await db.get(Brand, brand_id)
     if not brand:
@@ -174,6 +218,11 @@ async def list_brand_reports(
     query = select(Report).where(Report.brand_id == brand_id)
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar_one()
+
+    # Auto-generate baseline executive brief if 0 exist
+    if total == 0:
+        await compile_executive_brief_for_brand(db, brand, "executive_brief")
+        total = (await db.execute(count_query)).scalar_one()
 
     query = query.order_by(desc(Report.generated_at)).offset((page - 1) * size).limit(size)
     result = await db.execute(query)
